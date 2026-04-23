@@ -669,11 +669,19 @@ async function startReceive() {
       video: false
     });
   } catch(e) {
-    setRxStatus('Microphone denied \u2717', 'error');
-    return;
+    // Fallback: try with default constraints (some mobile browsers reject custom constraints)
+    try {
+      rxStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch(e2) {
+      setRxStatus('Microphone denied ✗', 'error');
+      dbgLog('MIC ERROR: ' + e2.message, 'log-warn');
+      return;
+    }
   }
 
   rxAudioCtx   = new (window.AudioContext || window.webkitAudioContext)();
+  // Resume context — required on mobile after user gesture
+  if (rxAudioCtx.state === 'suspended') await rxAudioCtx.resume();
   rxSampleRate  = rxAudioCtx.sampleRate;
 
   const baud = parseInt(document.getElementById('baud-rate').value);
@@ -681,13 +689,11 @@ async function startReceive() {
 
   const source = rxAudioCtx.createMediaStreamSource(rxStream);
 
+  // Use large FFT analyser — we poll it on rAF to extract time-domain samples
   rxAnalyser = rxAudioCtx.createAnalyser();
-  rxAnalyser.fftSize = 2048;
+  rxAnalyser.fftSize = 4096;
+  rxAnalyser.smoothingTimeConstant = 0; // raw samples, no smoothing
   source.connect(rxAnalyser);
-
-  rxScriptNode = rxAudioCtx.createScriptProcessor(256, 1, 1);
-  source.connect(rxScriptNode);
-  rxScriptNode.connect(rxAudioCtx.destination);
 
   rxListening   = true;
   rxDecoded     = '';
@@ -700,20 +706,37 @@ async function startReceive() {
   document.getElementById('rx-btn').style.display = 'none';
   document.getElementById('rx-stop-btn').style.display = 'flex';
   setRxStatus('Listening...', 'active');
-  dbgLog('RX started — hunting preamble...', 'log-info');
+  dbgLog('RX started @ ' + rxSampleRate + 'Hz, ' + rxSamplesPerBit + ' samp/bit', 'log-info');
 
-  rxScriptNode.onaudioprocess = (e) => {
-    if (!rxListening) return;
-    const input = e.inputBuffer.getChannelData(0);
-    for (let i = 0; i < input.length; i++) {
-      rxSampleAccum.push(input[i]);
-      if (rxSampleAccum.length >= rxSamplesPerBit) {
-        processBitBlock(rxSampleAccum.splice(0, rxSamplesPerBit));
-      }
-    }
-  };
-
+  pollAudio();
   drawRxWave();
+}
+
+// Poll analyser node time-domain buffer — works on ALL browsers including mobile
+let _lastPollTime = 0;
+function pollAudio() {
+  if (!rxListening) return;
+  requestAnimationFrame(pollAudio);
+
+  const now = performance.now();
+  // Only run at ~60fps to avoid over-sampling (rAF is 60Hz, plenty fast enough)
+  const buf = new Float32Array(rxAnalyser.fftSize);
+  rxAnalyser.getFloatTimeDomainData(buf);
+
+  // Feed all new samples into accumulator
+  for (let i = 0; i < buf.length; i++) {
+    rxSampleAccum.push(buf[i]);
+  }
+
+  // Process as many complete bit-windows as available
+  while (rxSampleAccum.length >= rxSamplesPerBit) {
+    processBitBlock(rxSampleAccum.splice(0, rxSamplesPerBit));
+  }
+
+  // Keep accumulator from growing unboundedly if baud is very slow
+  if (rxSampleAccum.length > rxSamplesPerBit * 4) {
+    rxSampleAccum = rxSampleAccum.slice(-rxSamplesPerBit * 2);
+  }
 }
 
 function processBitBlock(samples) {
@@ -790,36 +813,33 @@ function updateDecodedDisplay(text) {
 }
 
 function drawRxWave() {
+  // Drawing is now done inside pollAudio loop
+  _drawWaveLoop();
+}
+function _drawWaveLoop() {
+  if (!rxListening) return;
+  rxAnimFrame = requestAnimationFrame(_drawWaveLoop);
   const canvas = document.getElementById('rx-canvas');
   const ctx = canvas.getContext('2d');
   const W = canvas.width, H = canvas.height;
   const dataArr = new Uint8Array(rxAnalyser.fftSize);
-
-  function draw() {
-    if (!rxListening) return;
-    rxAnimFrame = requestAnimationFrame(draw);
-    rxAnalyser.getByteTimeDomainData(dataArr);
-    ctx.clearRect(0, 0, W, H);
-    ctx.beginPath();
-    ctx.strokeStyle = '#39ff14';
-    ctx.lineWidth = 1.5;
-    ctx.shadowColor = '#39ff14';
-    ctx.shadowBlur = 6;
-    const sliceW = W / dataArr.length;
-    let x = 0;
-    for (let i = 0; i < dataArr.length; i++) {
-      const y = (dataArr[i] / 128.0) * H / 2;
-      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      x += sliceW;
-    }
-    ctx.stroke();
+  rxAnalyser.getByteTimeDomainData(dataArr);
+  ctx.clearRect(0, 0, W, H);
+  ctx.beginPath();
+  ctx.strokeStyle = '#39ff14';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = '#39ff14';
+  ctx.shadowBlur = 6;
+  const step = Math.floor(dataArr.length / W);
+  for (let x = 0; x < W; x++) {
+    const y = (dataArr[x * step] / 128.0) * H / 2;
+    x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
-  draw();
+  ctx.stroke();
 }
 
 function stopReceive() {
   rxListening = false;
-  if (rxScriptNode) { rxScriptNode.disconnect(); rxScriptNode = null; }
   if (rxAnimFrame)  cancelAnimationFrame(rxAnimFrame);
   if (rxStream)     rxStream.getTracks().forEach(t => t.stop());
   if (rxAudioCtx)   rxAudioCtx.close();
