@@ -317,6 +317,56 @@
     letter-spacing: 0.1em;
   }
   .copy-btn:hover { background: rgba(57,255,20,0.2); }
+
+  .debug-panel {
+    width: 100%;
+    max-width: 900px;
+    background: #050a0d;
+    border: 1px solid #1a2d3d;
+    border-top: 2px solid #ff6b35;
+    border-radius: 4px;
+    padding: 16px 24px;
+    margin-top: 4px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    color: #ff6b35;
+  }
+  .debug-panel .debug-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.15em;
+    color: #ff6b35;
+    margin-bottom: 10px;
+  }
+  .debug-log {
+    background: rgba(0,0,0,0.6);
+    border: 1px solid #1a2d3d;
+    border-radius: 3px;
+    padding: 10px;
+    height: 120px;
+    overflow-y: auto;
+    line-height: 1.6;
+    color: #aaa;
+  }
+  .debug-log .log-ok   { color: #39ff14; }
+  .debug-log .log-warn { color: #ff6b35; }
+  .debug-log .log-info { color: #00e5ff; }
+  .debug-meters {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .debug-meter label { color: #3a5060; margin-bottom: 3px; display: block; }
+  .debug-meter .val {
+    font-size: 1rem;
+    color: #ff6b35;
+  }
+  .debug-bar-wrap { height: 4px; background: #1a2d3d; border-radius: 2px; margin-top: 4px; }
+  .debug-bar { height: 100%; border-radius: 2px; transition: width 0.1s; }
+  .bar-mark  { background: #00e5ff; }
+  .bar-space { background: #ff6b35; }
+  .bar-ratio { background: #39ff14; }
 </style>
 </head>
 <body>
@@ -422,6 +472,28 @@
     <button class="btn btn-stop" id="rx-stop-btn" onclick="stopReceive()" style="display:none">■ Stop Listening</button>
   </div>
 
+</div>
+
+<div class="debug-panel">
+  <div class="debug-title">⚡ Debug Monitor</div>
+  <div class="debug-meters">
+    <div class="debug-meter">
+      <label>MARK POWER (1200Hz)</label>
+      <div class="val" id="dbg-mark">0.000</div>
+      <div class="debug-bar-wrap"><div class="debug-bar bar-mark" id="dbg-mark-bar" style="width:0%"></div></div>
+    </div>
+    <div class="debug-meter">
+      <label>SPACE POWER (2200Hz)</label>
+      <div class="val" id="dbg-space">0.000</div>
+      <div class="debug-bar-wrap"><div class="debug-bar bar-space" id="dbg-space-bar" style="width:0%"></div></div>
+    </div>
+    <div class="debug-meter">
+      <label>MARK RATIO (>0.6=1, <0.4=0)</label>
+      <div class="val" id="dbg-ratio">—</div>
+      <div class="debug-bar-wrap"><div class="debug-bar bar-ratio" id="dbg-ratio-bar" style="width:0%"></div></div>
+    </div>
+  </div>
+  <div class="debug-log" id="debug-log"><span style="color:#3a5060">Waiting for receiver to start...</span></div>
 </div>
 
 <script>
@@ -628,6 +700,7 @@ async function startReceive() {
   document.getElementById('rx-btn').style.display = 'none';
   document.getElementById('rx-stop-btn').style.display = 'flex';
   setRxStatus('Listening...', 'active');
+  dbgLog('RX started — hunting preamble...', 'log-info');
 
   rxScriptNode.onaudioprocess = (e) => {
     if (!rxListening) return;
@@ -665,6 +738,7 @@ function processBitBlock(samples) {
       rxSyncState = 'synced';
       rxFrameBuf  = [];
       setRxStatus('Sync acquired! Decoding...', 'active');
+      dbgLog('SYNC ACQUIRED — decoding frames', 'log-ok');
       document.getElementById('rx-progress').style.width = '10%';
     }
   } else {
@@ -682,12 +756,14 @@ function processBitBlock(samples) {
 
         if (charCode === 0x04) {
           setRxStatus('Message received \u2713', 'idle');
+          dbgLog('EOT received — done!', 'log-ok');
           rxSyncState = 'hunting';
           rxBitRing   = [];
           document.getElementById('rx-progress').style.width = '100%';
           setTimeout(() => document.getElementById('rx-progress').style.width = '0%', 2000);
         } else if (charCode >= 32 && charCode < 127) {
           rxDecoded += String.fromCharCode(charCode);
+          dbgLog('CHAR: ' + String.fromCharCode(charCode) + ' (0x' + charCode.toString(16) + ')', 'log-info');
           updateDecodedDisplay(rxDecoded);
           document.getElementById('rx-progress').style.width =
             (10 + (rxDecoded.length % 10) * 9) + '%';
@@ -698,6 +774,7 @@ function processBitBlock(samples) {
         rxSyncState = 'hunting';
         rxBitRing   = [];
         setRxStatus('Framing error, re-syncing...', 'active');
+        dbgLog('FRAMING ERROR — back to hunting', 'log-warn');
       }
     }
   }
