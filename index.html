@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SoundLink — Acoustic Data Transfer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #090e12;
+    --panel: #0d1520;
+    --border: #1a2d3d;
+    --tx: #00e5ff;
+    --rx: #39ff14;
+    --warn: #ff6b35;
+    --text: #c8dce8;
+    --dim: #3a5060;
+    --glow-tx: 0 0 20px rgba(0,229,255,0.4);
+    --glow-rx: 0 0 20px rgba(57,255,20,0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 48px;
+    background-image:
+      radial-gradient(ellipse at 20% 0%, rgba(0,229,255,0.06) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, rgba(57,255,20,0.05) 0%, transparent 50%);
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+
+  header h1 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: clamp(3rem, 8vw, 5rem);
+    letter-spacing: 0.15em;
+    background: linear-gradient(90deg, var(--tx), #80ffee, var(--rx));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+  }
+
+  header p {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--dim);
+    letter-spacing: 0.3em;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    width: 100%;
+    max-width: 900px;
+  }
+
+  @media (max-width: 640px) {
+    .app { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+
+  .tx-panel::before { background: var(--tx); box-shadow: var(--glow-tx); }
+  .rx-panel::before { background: var(--rx); box-shadow: var(--glow-rx); }
+
+  .panel-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.15em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .tx-panel .panel-label { color: var(--tx); text-shadow: var(--glow-tx); }
+  .rx-panel .panel-label { color: var(--rx); text-shadow: var(--glow-rx); }
+
+  .badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    padding: 2px 8px;
+    border-radius: 2px;
+    vertical-align: middle;
+  }
+
+  .tx-badge { background: rgba(0,229,255,0.12); color: var(--tx); border: 1px solid rgba(0,229,255,0.3); }
+  .rx-badge { background: rgba(57,255,20,0.12); color: var(--rx); border: 1px solid rgba(57,255,20,0.3); }
+
+  label {
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-family: 'Share Tech Mono', monospace;
+    display: block;
+    margin-bottom: 6px;
+  }
+
+  textarea, input[type="text"] {
+    width: 100%;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85rem;
+    padding: 10px 12px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus, input:focus { border-color: var(--tx); }
+  .rx-panel textarea:focus { border-color: var(--rx); }
+
+  textarea { min-height: 80px; }
+
+  .btn {
+    font-family: 'Bebas Neue', sans-serif;
+    letter-spacing: 0.15em;
+    font-size: 1.1rem;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .btn-tx {
+    background: var(--tx);
+    color: #000;
+    box-shadow: 0 0 16px rgba(0,229,255,0.3);
+  }
+  .btn-tx:hover { box-shadow: 0 0 28px rgba(0,229,255,0.6); transform: translateY(-1px); }
+  .btn-tx:active { transform: translateY(0); }
+  .btn-tx:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-rx {
+    background: var(--rx);
+    color: #000;
+    box-shadow: 0 0 16px rgba(57,255,20,0.3);
+  }
+  .btn-rx:hover { box-shadow: 0 0 28px rgba(57,255,20,0.6); transform: translateY(-1px); }
+  .btn-rx:active { transform: translateY(0); }
+  .btn-rx:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-stop {
+    background: rgba(255,107,53,0.15);
+    color: var(--warn);
+    border: 1px solid var(--warn);
+  }
+  .btn-stop:hover { background: rgba(255,107,53,0.25); }
+
+  .visualizer-wrap {
+    position: relative;
+  }
+
+  canvas {
+    width: 100%;
+    height: 60px;
+    border-radius: 3px;
+    display: block;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+  }
+
+  .status-bar {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.72rem;
+    color: var(--dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 18px;
+  }
+
+  .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--dim);
+    flex-shrink: 0;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+
+  .dot.active-tx { background: var(--tx); box-shadow: 0 0 8px var(--tx); animation: pulse 0.8s infinite; }
+  .dot.active-rx { background: var(--rx); box-shadow: 0 0 8px var(--rx); animation: pulse 0.8s infinite; }
+  .dot.error { background: var(--warn); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 2px;
+    transition: width 0.1s linear;
+  }
+
+  .tx-fill { background: var(--tx); box-shadow: 0 0 8px var(--tx); }
+  .rx-fill { background: var(--rx); box-shadow: 0 0 8px var(--rx); }
+
+  .settings {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .setting-item label { margin-bottom: 4px; }
+
+  select {
+    width: 100%;
+    background: rgba(0,0,0,0.4);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.8rem;
+    padding: 7px 10px;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .decoded-output {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.85rem;
+    min-height: 80px;
+    word-break: break-all;
+    color: var(--rx);
+    position: relative;
+  }
+
+  .decoded-output .placeholder {
+    color: var(--dim);
+    font-style: italic;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  .freq-display {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--dim);
+    text-align: right;
+  }
+
+  .info-row {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--dim);
+  }
+
+  .copy-btn {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    background: rgba(57,255,20,0.1);
+    border: 1px solid rgba(57,255,20,0.25);
+    color: var(--rx);
+    border-radius: 2px;
+    cursor: pointer;
+    letter-spacing: 0.1em;
+  }
+  .copy-btn:hover { background: rgba(57,255,20,0.2); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SoundLink</h1>
+  <p>Acoustic Data Transfer // FSK Modem // Bell 202</p>
+</header>
+
+<div class="app">
+
+  <!-- TRANSMITTER -->
+  <div class="panel tx-panel">
+    <div class="panel-label">
+      📡 Transmit
+      <span class="badge tx-badge">TX</span>
+    </div>
+
+    <div>
+      <label>Message to transmit</label>
+      <textarea id="tx-input" placeholder="Type your message here...">Hello from SoundLink!</textarea>
+    </div>
+
+    <div class="settings">
+      <div class="setting-item">
+        <label>Baud Rate</label>
+        <select id="baud-rate">
+          <option value="10">10 baud (slow)</option>
+          <option value="20" selected>20 baud</option>
+          <option value="40">40 baud (fast)</option>
+        </select>
+      </div>
+      <div class="setting-item">
+        <label>Protocol</label>
+        <select id="protocol">
+          <option value="fsk">FSK Binary</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="info-row">
+      <span>MARK: 1200 Hz &nbsp;|&nbsp; SPACE: 2200 Hz</span>
+      <span id="tx-char-count">0 chars</span>
+    </div>
+
+    <div class="visualizer-wrap">
+      <label>Waveform</label>
+      <canvas id="tx-canvas" width="400" height="60"></canvas>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill tx-fill" id="tx-progress"></div>
+    </div>
+
+    <div class="status-bar">
+      <div class="dot" id="tx-dot"></div>
+      <span id="tx-status">Ready to transmit</span>
+    </div>
+
+    <button class="btn btn-tx" id="tx-btn" onclick="startTransmit()">▶ Transmit</button>
+    <button class="btn btn-stop" id="tx-stop-btn" onclick="stopTransmit()" style="display:none">■ Stop</button>
+  </div>
+
+  <!-- RECEIVER -->
+  <div class="panel rx-panel">
+    <div class="panel-label">
+      🎙️ Receive
+      <span class="badge rx-badge">RX</span>
+    </div>
+
+    <div>
+      <label>Received Data</label>
+      <div class="decoded-output" id="decoded-output">
+        <span class="placeholder">Waiting for signal...</span>
+      </div>
+    </div>
+
+    <div class="info-row">
+      <span>Threshold: auto-calibrating</span>
+      <button class="copy-btn" onclick="copyDecoded()">COPY</button>
+    </div>
+
+    <div class="visualizer-wrap">
+      <label>Microphone Input</label>
+      <canvas id="rx-canvas" width="400" height="60"></canvas>
+    </div>
+
+    <div>
+      <label>Detected Frequency</label>
+      <div class="freq-display" id="freq-display">— Hz</div>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill rx-fill" id="rx-progress"></div>
+    </div>
+
+    <div class="status-bar">
+      <div class="dot" id="rx-dot"></div>
+      <span id="rx-status">Microphone off</span>
+    </div>
+
+    <button class="btn btn-rx" id="rx-btn" onclick="startReceive()">🎙 Start Listening</button>
+    <button class="btn btn-stop" id="rx-stop-btn" onclick="stopReceive()" style="display:none">■ Stop Listening</button>
+  </div>
+
+</div>
+
+<script>
+// ─── FSK CONFIG ────────────────────────────────────────────
+const MARK_FREQ  = 1200;  // bit 1 (Bell 202)
+const SPACE_FREQ = 2200;  // bit 0 (Bell 202)
+const PREAMBLE   = [1,0,1,0,1,0,1,0];
+
+// ─── TX STATE ─────────────────────────────────────────────
+let txCtx = null, txAnimFrame = null, txOsc = null, txGain = null;
+let txPlaying = false;
+
+// ─── RX STATE ─────────────────────────────────────────────
+let rxStream = null, rxAudioCtx = null, rxAnalyser = null, rxScriptNode = null;
+let rxAnimFrame = null, rxListening = false;
+let rxDecoded = '';
+let rxSampleRate = 44100;
+let rxBitRing   = [];
+let rxSyncState = 'hunting';
+let rxFrameBuf  = [];
+let rxSampleAccum = [];
+let rxSamplesPerBit = 0;
+
+// ─── CHAR COUNT ─────────────────────────────────────────────
+document.getElementById('tx-input').addEventListener('input', () => {
+  const v = document.getElementById('tx-input').value;
+  document.getElementById('tx-char-count').textContent = v.length + ' chars';
+});
+
+// ═══════════════════════════════════════════════════════════
+//  TRANSMITTER
+// ═══════════════════════════════════════════════════════════
+function textToBits(text) {
+  const bits = [...PREAMBLE, ...PREAMBLE]; // double preamble for robust sync
+  for (const ch of text) {
+    const code = ch.charCodeAt(0);
+    bits.push(0); // START bit
+    for (let i = 0; i < 8; i++) bits.push((code >> i) & 1);
+    bits.push(1); // STOP bit
+  }
+  for (let b = 0; b < 3; b++) {
+    bits.push(0);
+    for (let i = 0; i < 8; i++) bits.push((0x04 >> i) & 1);
+    bits.push(1);
+  }
+  return bits;
+}
+
+async function startTransmit() {
+  const msg = document.getElementById('tx-input').value.trim();
+  if (!msg) return;
+
+  const baud = parseInt(document.getElementById('baud-rate').value);
+  const bitDuration = 1 / baud;
+  const bits = textToBits(msg);
+
+  txPlaying = true;
+  document.getElementById('tx-btn').style.display = 'none';
+  document.getElementById('tx-stop-btn').style.display = 'flex';
+  setTxStatus('Transmitting...', 'active');
+
+  txCtx = new (window.AudioContext || window.webkitAudioContext)();
+  txOsc  = txCtx.createOscillator();
+  txGain = txCtx.createGain();
+  txOsc.type = 'sine';
+  txOsc.connect(txGain);
+  txGain.connect(txCtx.destination);
+  txOsc.start();
+  txGain.gain.setValueAtTime(0.5, txCtx.currentTime);
+
+  const startTime = txCtx.currentTime;
+  bits.forEach((bit, i) => {
+    txOsc.frequency.setValueAtTime(bit === 1 ? MARK_FREQ : SPACE_FREQ, startTime + i * bitDuration);
+  });
+
+  drawTxWave(bits, baud);
+
+  let elapsed = 0;
+  const total = bits.length * bitDuration * 1000;
+  const progInterval = setInterval(() => {
+    if (!txPlaying) { clearInterval(progInterval); return; }
+    elapsed += 100;
+    document.getElementById('tx-progress').style.width = Math.min(100, (elapsed / total) * 100) + '%';
+    if (elapsed >= total) clearInterval(progInterval);
+  }, 100);
+
+  setTimeout(() => { if (txPlaying) stopTransmit(true); }, total + 300);
+}
+
+function drawTxWave(bits, baud) {
+  const canvas = document.getElementById('tx-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  let frame = 0;
+  const bitDurationMs = 1000 / baud;
+
+  function draw() {
+    if (!txPlaying) return;
+    txAnimFrame = requestAnimationFrame(draw);
+    ctx.clearRect(0, 0, W, H);
+    const now = frame * (1000 / 30);
+    ctx.beginPath();
+    ctx.strokeStyle = '#00e5ff';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#00e5ff';
+    ctx.shadowBlur = 6;
+    for (let x = 0; x < W; x++) {
+      const b = bits[Math.floor((x / W) * bits.length)] === 1 ? MARK_FREQ : SPACE_FREQ;
+      const t = (x / W) * 0.05 + now / 1000;
+      const y = H / 2 + (H * 0.35) * Math.sin(2 * Math.PI * b * t * 0.01);
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    frame++;
+  }
+  draw();
+}
+
+function stopTransmit(finished = false) {
+  txPlaying = false;
+  if (txOsc) { try { txOsc.stop(); } catch(e){} }
+  if (txCtx) { txCtx.close(); txCtx = null; }
+  if (txAnimFrame) cancelAnimationFrame(txAnimFrame);
+  document.getElementById('tx-btn').style.display = 'flex';
+  document.getElementById('tx-stop-btn').style.display = 'none';
+  document.getElementById('tx-progress').style.width = finished ? '100%' : '0%';
+  setTxStatus(finished ? 'Transmission complete \u2713' : 'Stopped', 'idle');
+  const c = document.getElementById('tx-canvas');
+  c.getContext('2d').clearRect(0, 0, c.width, c.height);
+  if (finished) setTimeout(() => document.getElementById('tx-progress').style.width = '0%', 2000);
+}
+
+function setTxStatus(msg, state) {
+  document.getElementById('tx-status').textContent = msg;
+  const dot = document.getElementById('tx-dot');
+  dot.className = 'dot' + (state === 'active' ? ' active-tx' : state === 'error' ? ' error' : '');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  GOERTZEL — precise single-frequency power detector
+// ═══════════════════════════════════════════════════════════
+function goertzel(samples, targetFreq, sampleRate) {
+  const N = samples.length;
+  const k = Math.round(N * targetFreq / sampleRate);
+  const w = (2 * Math.PI * k) / N;
+  const coeff = 2 * Math.cos(w);
+  let s0 = 0, s1 = 0, s2 = 0;
+  for (let i = 0; i < N; i++) {
+    s0 = samples[i] + coeff * s1 - s2;
+    s2 = s1; s1 = s0;
+  }
+  return s1 * s1 + s2 * s2 - coeff * s1 * s2;
+}
+
+function classifyBlock(samples, sampleRate) {
+  const pMark  = goertzel(samples, MARK_FREQ,  sampleRate);
+  const pSpace = goertzel(samples, SPACE_FREQ, sampleRate);
+  const total  = pMark + pSpace;
+  if (total < 0.005) return null; // silence
+  const ratio = pMark / total;
+  if (ratio > 0.6) return 1;
+  if (ratio < 0.4) return 0;
+  return null; // ambiguous
+}
+
+// ═══════════════════════════════════════════════════════════
+//  RECEIVER
+// ═══════════════════════════════════════════════════════════
+async function startReceive() {
+  try {
+    rxStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      video: false
+    });
+  } catch(e) {
+    setRxStatus('Microphone denied \u2717', 'error');
+    return;
+  }
+
+  rxAudioCtx   = new (window.AudioContext || window.webkitAudioContext)();
+  rxSampleRate  = rxAudioCtx.sampleRate;
+
+  const baud = parseInt(document.getElementById('baud-rate').value);
+  rxSamplesPerBit = Math.floor(rxSampleRate / baud);
+
+  const source = rxAudioCtx.createMediaStreamSource(rxStream);
+
+  rxAnalyser = rxAudioCtx.createAnalyser();
+  rxAnalyser.fftSize = 2048;
+  source.connect(rxAnalyser);
+
+  rxScriptNode = rxAudioCtx.createScriptProcessor(256, 1, 1);
+  source.connect(rxScriptNode);
+  rxScriptNode.connect(rxAudioCtx.destination);
+
+  rxListening   = true;
+  rxDecoded     = '';
+  rxBitRing     = [];
+  rxSyncState   = 'hunting';
+  rxFrameBuf    = [];
+  rxSampleAccum = [];
+
+  updateDecodedDisplay('');
+  document.getElementById('rx-btn').style.display = 'none';
+  document.getElementById('rx-stop-btn').style.display = 'flex';
+  setRxStatus('Listening...', 'active');
+
+  rxScriptNode.onaudioprocess = (e) => {
+    if (!rxListening) return;
+    const input = e.inputBuffer.getChannelData(0);
+    for (let i = 0; i < input.length; i++) {
+      rxSampleAccum.push(input[i]);
+      if (rxSampleAccum.length >= rxSamplesPerBit) {
+        processBitBlock(rxSampleAccum.splice(0, rxSamplesPerBit));
+      }
+    }
+  };
+
+  drawRxWave();
+}
+
+function processBitBlock(samples) {
+  const bit = classifyBlock(samples, rxSampleRate);
+
+  if (bit === 1) document.getElementById('freq-display').textContent = MARK_FREQ + ' Hz (MARK=1)';
+  else if (bit === 0) document.getElementById('freq-display').textContent = SPACE_FREQ + ' Hz (SPACE=0)';
+  else document.getElementById('freq-display').textContent = '\u2014 Hz';
+
+  if (bit === null) {
+    if (rxSyncState === 'hunting') rxBitRing = [];
+    return;
+  }
+
+  if (rxSyncState === 'hunting') {
+    rxBitRing.push(bit);
+    if (rxBitRing.length > PREAMBLE.length * 3) rxBitRing.shift();
+
+    // Sliding window: check if last PREAMBLE.length bits match
+    const tail = rxBitRing.slice(-PREAMBLE.length);
+    if (tail.length === PREAMBLE.length && tail.every((b, i) => b === PREAMBLE[i])) {
+      rxSyncState = 'synced';
+      rxFrameBuf  = [];
+      setRxStatus('Sync acquired! Decoding...', 'active');
+      document.getElementById('rx-progress').style.width = '10%';
+    }
+  } else {
+    rxFrameBuf.push(bit);
+
+    if (rxFrameBuf.length === 10) {
+      const start = rxFrameBuf[0];
+      const stop  = rxFrameBuf[9];
+      const data  = rxFrameBuf.slice(1, 9);
+      rxFrameBuf  = [];
+
+      if (start === 0 && stop === 1) {
+        let charCode = 0;
+        for (let i = 0; i < 8; i++) charCode |= data[i] << i;
+
+        if (charCode === 0x04) {
+          setRxStatus('Message received \u2713', 'idle');
+          rxSyncState = 'hunting';
+          rxBitRing   = [];
+          document.getElementById('rx-progress').style.width = '100%';
+          setTimeout(() => document.getElementById('rx-progress').style.width = '0%', 2000);
+        } else if (charCode >= 32 && charCode < 127) {
+          rxDecoded += String.fromCharCode(charCode);
+          updateDecodedDisplay(rxDecoded);
+          document.getElementById('rx-progress').style.width =
+            (10 + (rxDecoded.length % 10) * 9) + '%';
+        }
+        // ignore non-printable but keep sync
+      } else {
+        // Framing error — lost sync
+        rxSyncState = 'hunting';
+        rxBitRing   = [];
+        setRxStatus('Framing error, re-syncing...', 'active');
+      }
+    }
+  }
+}
+
+function updateDecodedDisplay(text) {
+  const el = document.getElementById('decoded-output');
+  if (!text) {
+    el.innerHTML = '<span class="placeholder">Waiting for signal...</span>';
+  } else {
+    el.textContent = text;
+  }
+}
+
+function drawRxWave() {
+  const canvas = document.getElementById('rx-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const dataArr = new Uint8Array(rxAnalyser.fftSize);
+
+  function draw() {
+    if (!rxListening) return;
+    rxAnimFrame = requestAnimationFrame(draw);
+    rxAnalyser.getByteTimeDomainData(dataArr);
+    ctx.clearRect(0, 0, W, H);
+    ctx.beginPath();
+    ctx.strokeStyle = '#39ff14';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = '#39ff14';
+    ctx.shadowBlur = 6;
+    const sliceW = W / dataArr.length;
+    let x = 0;
+    for (let i = 0; i < dataArr.length; i++) {
+      const y = (dataArr[i] / 128.0) * H / 2;
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      x += sliceW;
+    }
+    ctx.stroke();
+  }
+  draw();
+}
+
+function stopReceive() {
+  rxListening = false;
+  if (rxScriptNode) { rxScriptNode.disconnect(); rxScriptNode = null; }
+  if (rxAnimFrame)  cancelAnimationFrame(rxAnimFrame);
+  if (rxStream)     rxStream.getTracks().forEach(t => t.stop());
+  if (rxAudioCtx)   rxAudioCtx.close();
+
+  document.getElementById('rx-btn').style.display = 'flex';
+  document.getElementById('rx-stop-btn').style.display = 'none';
+  setRxStatus('Microphone off', 'idle');
+  document.getElementById('freq-display').textContent = '\u2014 Hz';
+
+  const c = document.getElementById('rx-canvas');
+  c.getContext('2d').clearRect(0, 0, c.width, c.height);
+}
+
+function setRxStatus(msg, state) {
+  document.getElementById('rx-status').textContent = msg;
+  const dot = document.getElementById('rx-dot');
+  dot.className = 'dot' + (state === 'active' ? ' active-rx' : state === 'error' ? ' error' : '');
+}
+
+function copyDecoded() {
+  navigator.clipboard.writeText(rxDecoded).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'COPIED!';
+    setTimeout(() => btn.textContent = 'COPY', 1500);
+  });
+}
+</script>
+</body>
+</html>
